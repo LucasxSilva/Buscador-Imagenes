@@ -1,38 +1,34 @@
-from PyQt6 import QtCore, QtWidgets #,QtGui
+from PyQt6 import QtCore, QtWidgets 
 from PyQt6.QtWidgets import QFileDialog,QInputDialog
-#from PyQt6.QtCore import pyqtSlot
-import shutil
-import sys
 from PyQt6.QtGui import QStandardItemModel
 from PyQt6.QtCore import QFileSystemWatcher
 from PyQt6.QtGui import QIntValidator,QIcon
-#from PyQt6.QtCore import QThread, pyqtSignal
+from threading import Thread
+from time import sleep
+from keyboard import is_pressed
+import shutil
+import sys
 import win32api
 import win32con
-
 import ctypes #obtener posicion actual y volver a ella
 import cv2
 import pyautogui
 pyautogui.FAILSAFE = False
-from threading import Thread
 import multiprocessing as mp
-from time import sleep
-from keyboard import is_pressed
-
 import os
 current_dir = os.getcwd()
 img_path = os.path.join(current_dir, "Imagenes","")
-included_extensions = ['JPG','jpg','jpeg', 'bmp','PNG', 'png', 'gif','',' ']
-file_names = [fn for fn in os.listdir(img_path)
-    if any(fn.endswith(ext) for ext in included_extensions)]
+
 
 if not os.path.exists(img_path):
     os.makedirs(img_path)
 
+included_extensions = ['JPG','jpg','jpeg', 'bmp','PNG', 'png', 'gif','',' ']
+file_names = [fn for fn in os.listdir(img_path)
+    if any(fn.endswith(ext) for ext in included_extensions)]
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long),
                 ("y", ctypes.c_long)]
-
 
 class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
 
@@ -48,14 +44,15 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
         self.lista_confidence=[0.9]             #determina similitud necesaria para hacer click con la imagen. Acepta valores entre 0.0 y 1.0
         self.lista_nombres=["Inicial"]
         #crea thread para manejar teclado
-        self.input_thread = Thread(target=self.handle_input)
-        self.input_thread.daemon = True
+        self.input_thread = Thread(target=self.handle_input, daemon=True)
         self.input_thread.start()   
 
         self.buscar=[False,False]   # [0]permite buscar   [1]pos inicial [2]pos final
-        self.click_thread = Thread(target=self.store_mouse_pos)
-        self.click_thread.daemon = True
 
+        self.color_default=(0,0,0)
+        self.click_thread = None
+        
+        
     def cambiar_si_inicial_mayor_final(self):
         cambios=False
         if self.lista_posiciones[self.cb_index][0]>self.lista_posiciones[self.cb_index][2]: #x inicial mayor a x final
@@ -93,7 +90,6 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
                 pausa.value=True
                 self.rb_activado.setChecked(False)
                 print("Pausa")
-            
             if is_pressed('+'):
                 for i,lista in enumerate(self.lista_img):#index de cb_index, es el index que contiene lista de imagenes
                     for j,img in enumerate(lista):        #recorre el index de cada imagen en esa lista
@@ -105,35 +101,27 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
                             self.txtno_top_left_y.setText(str(location[1]))
                             self.txtno_bot_right_x.setText(str(location[0]+location[2]))
                             self.txtno_bot_right_y.setText(str(location[1]+location[3]))
-                
-            while pausa.value==True:
-                if is_pressed('*'):
-                    print("Desactivar todo")
-                    self.lista_activado=[False] * len(self.lista_activado)
-                    self.rb_activado.setChecked(False)
-                    break
+            
+            
+            if pausa.value==True:
                 if is_pressed('r'):
                     pausa.value=False
                     print("Reanudar")
+                    # si en self.lista_activado, esta activado, llama a la funcion con el correspondiente index
+                    threads = [Thread(target=self.detectar_imagenes, args=(index,))
+                            for index, activado in enumerate(self.lista_activado) if activado]
+
+                    # Start all threads
+                    for thread in threads:
+                        thread.start()
                     if self.lista_activado[self.cb_index]==True:
-                        self.rb_activado.setChecked(True)
-                    break
-                if is_pressed('+'): #cambia la region donde buscar
-                    for i,lista in enumerate(self.lista_img):#index de cb_index, es el index que contiene lista de imagenes
-                        for j,img in enumerate(lista):        #recorre el index de cada imagen en esa lista
-                            #print(pyautogui.locateOnScreen(lista[j]))
-                            location=pyautogui.locateOnScreen(lista[j],confidence=self.lista_confidence[i])
-                            if location!= None:
-                                self.lista_posiciones[i] = [location[0],location[1],location[0]+location[2],location[1]+location[3]]
-                                self.txtno_top_left_x.setText(str(location[0]))
-                                self.txtno_top_left_y.setText(str(location[1]))
-                                self.txtno_bot_right_x.setText(str(location[0]+location[2]))
-                                self.txtno_bot_right_y.setText(str(location[1]+location[3]))
-                sleep(0.1)
+                        self.rb_activado.setChecked(True)  
             sleep(0.1)
             
     def detectar_imagen_singular(self,img, region,confidence):
         location=None
+        print(type(region),type(region[0]),type(region[1]),type(region[2]),type(region[3]))
+        print(confidence)
         try:
             location = pyautogui.locateCenterOnScreen(img, region=region, confidence=confidence, grayscale=True)
         except:
@@ -160,12 +148,23 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
             if region[3]>screen_height:
                 region[3]=screen_height
 
-
         if location:
             user32.GetCursorPos(ctypes.byref(point))
             while location!=None:
                 pyautogui.click(location.x,location.y)
                 location = pyautogui.locateCenterOnScreen(img, region=region, confidence=confidence, grayscale=True)
+                if is_pressed('*'):
+                    self.lista_activado=[False] * len(self.lista_activado)
+                    self.rb_activado.setChecked(False)
+                    print("Desactivar todo")
+                    break
+
+                if is_pressed('p'):
+                    pausa.value=True
+                    self.rb_activado.setChecked(False)
+                    print("Pausa")
+                    break
+                
                 if not location:
                     break
             sleep(0.1)
@@ -173,43 +172,41 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
 
     def detectar_imagenes(self,cb_index):
         while self.lista_activado[cb_index]==True and len(self.lista_img[cb_index])>0:  
+            #print(cb_index)
             if pausa.value==False:     
-            #threads = []
                 for img in self.lista_img[cb_index]:
                     self.detectar_imagen_singular(img,self.lista_posiciones[cb_index],self.lista_confidence[cb_index])
                     sleep(0.3)
             else:
-                sleep(2)
-                #thread = Thread(target=self.detectar_imagen_singular, args=(img, region), daemon=True)
-                #threads.append(thread)
-                #thread.start()
-                #sleep(1)
-            # Wait for all threads to finish
-            #for thread in threads:
-                #thread.join()
+                break
         
     def mouse_store_start(self,x):
-        self.buscar[:2]=[False,False]
         self.buscar[x]=True
-        
-        if self.click_thread is not None and self.click_thread.is_alive():
+        if self.click_thread != None and self.click_thread.is_alive():
             print("click_thread ocupado")
-            pass
         else:
+            if self.buscar[0]==True:
+                self.color_default = self.btn_inicial.palette().color(self.btn_inicial.backgroundRole())
+                self.color_default = tuple(self.color_default.getRgb()[:3])
+                self.btn_inicial.setStyleSheet("background-color: red;")
+                self.btn_final.setStyleSheet(f"background-color: rgb{self.color_default};")
+
+            elif self.buscar[1]==True:
+                self.color_default = self.btn_final.palette().color(self.btn_final.backgroundRole())
+                self.color_default = tuple(self.color_default.getRgb()[:3])
+                self.btn_final.setStyleSheet("background-color: red;")
+                self.btn_inicial.setStyleSheet(f"background-color: rgb{self.color_default};")      
+                                
             # create and start a new thread
-            self.click_thread = Thread(target=self.store_mouse_pos)
-            self.click_thread.daemon = True
+            self.click_thread = Thread(target=self.store_mouse_pos, daemon=True)
             self.click_thread.start() 
-            
+
     def store_mouse_pos(self):
         if win32api.GetAsyncKeyState(win32con.VK_LBUTTON) != 0:  # detecta click mouse izquierdo
             while True:
                 #pyautogui.mouseInfo()
                 if win32api.GetAsyncKeyState(win32con.VK_LBUTTON) != 0:  # detecta click mouse izquierdo
                     x, y = pyautogui.position()
-                    #print(x,y)
-                #if x is not None and y is not None:
-
                     if self.buscar[0]==True: #determina pos inicial
                         self.lista_posiciones[self.cb_index][0]=x
                         self.lista_posiciones[self.cb_index][1]=y
@@ -217,6 +214,7 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
                         self.txtno_top_left_y.setText(str(y))
                         self.buscar[:2]=[False,False]
                         self.cb_posicion.setItemText(self.cb_posicion.currentIndex(),self.lista_nombres[self.cb_index]+"     "+str(self.lista_posiciones[self.cb_index][0])+" "+str(self.lista_posiciones[self.cb_index][1])+" "+str(self.lista_posiciones[self.cb_index][2])+" "+str(self.lista_posiciones[self.cb_index][3]))
+                        self.cambiar_color(self.btn_inicial,(255,0,0),self.color_default,25)
                         break
                     if self.buscar[1]==True: #determina pos final
                         self.lista_posiciones[self.cb_index][2]=x
@@ -224,11 +222,23 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
                         self.txtno_bot_right_x.setText(str(x))
                         self.txtno_bot_right_y.setText(str(y))
                         self.buscar[:2]=[False,False]        
-                        self.cb_posicion.setItemText(self.cb_posicion.currentIndex(),self.lista_nombres[self.cb_index]+"     "+str(self.lista_posiciones[self.cb_index][0])+" "+str(self.lista_posiciones[self.cb_index][1])+" "+str(self.lista_posiciones[self.cb_index][2])+" "+str(self.lista_posiciones[self.cb_index][3]))
+                        self.cb_posicion.setItemText(self.cb_posicion.currentIndex(),self.lista_nombres[self.cb_index]+"     "+str(self.lista_posiciones[self.cb_index][0])+" "+str(self.lista_posiciones[self.cb_index][1])+" "+str(self.lista_posiciones[self.cb_index][2])+" "+str(self.lista_posiciones[self.cb_index][3]))  
+                        self.cambiar_color(self.btn_final,(255,0,0),self.color_default,25)
                         break
                 sleep(0.1)
             self.cambiar_si_inicial_mayor_final()
-        
+
+    def cambiar_color(self,widget,start,end,tick_interval):
+        diff = tuple(end[i] - start[i] for i in range(3))
+        # Calculate the increment for each tick
+        tick_increment = tuple(diff[i] / tick_interval for i in range(3))
+        for tick in range(tick_interval):
+            intermediate = tuple(start[i] + tick * tick_increment[i] for i in range(3))
+            intermediate = tuple(int(round(val)) for val in intermediate)
+            widget.setStyleSheet(f"background-color: rgb{intermediate};")
+            sleep(0.0001)
+        widget.setStyleSheet(f"background-color: rgb{end};")
+
     def setupUi(self, Buscador):
         Buscador.setObjectName("Buscador")
         Buscador.resize(490, 324)
@@ -488,7 +498,7 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
         self.txt_top_left_y.setInputMask("")
         self.txt_top_left_y.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.txt_top_left_y.setObjectName("txt_top_left_y")
-        self.txt_top_left_y.setValidator(QIntValidator(0,9))
+        self.txt_top_left_y.setValidator(QIntValidator(0,9999))
         self.lyt_pos_inicial.addWidget(self.txt_top_left_y)
         self.lyt_pos_info.addLayout(self.lyt_pos_inicial)
         self.lyt_pos_final = QtWidgets.QHBoxLayout()
@@ -529,7 +539,7 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
         self.txt_bot_right_x.setInputMask("")
         self.txt_bot_right_x.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.txt_bot_right_x.setObjectName("txt_bot_right_x")
-        self.txt_bot_right_x.setValidator(QIntValidator(0,9))
+        self.txt_bot_right_x.setValidator(QIntValidator(0,9999))
         self.lyt_pos_final.addWidget(self.txt_bot_right_x)
         self.lbl_bot_righty = QtWidgets.QLabel(parent=Buscador)
         sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Preferred, QtWidgets.QSizePolicy.Policy.Fixed)
@@ -549,7 +559,7 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
         self.txt_bot_right_y.setInputMask("")
         self.txt_bot_right_y.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.txt_bot_right_y.setObjectName("txt_bot_right_y")
-        self.txt_bot_right_y.setValidator(QIntValidator(0,9))
+        self.txt_bot_right_y.setValidator(QIntValidator(0,9999))
         self.lyt_pos_final.addWidget(self.txt_bot_right_y)
         
         
@@ -783,12 +793,10 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
         self.lblno_confidence.setText(_translate("Buscador", "Similitud (0.0 - 1.0)"))
         self.txtno_confidence.setText(_translate("Buscador", "0.9"))
 
-
     def check_txt_empty(self,text):
         if not text: #se fija si esta vacio
             sender = self.sender()    #obtiene el objeto que llamo a esta funcion
-            sender.setText('0')       #cambia el text a 0
-        
+            sender.setText('0')       #cambia el text a 0  
         
     def add_pos(self):
         #print(self.cb_posicion.count())
@@ -801,7 +809,7 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
         self.txtno_bot_right_x.setText(self.txt_bot_right_x.text())
         self.txtno_bot_right_y.setText(self.txt_bot_right_y.text())
         try:
-            if self.txt_confidence.text()<0 or self.txt_confidence.text()>1:
+            if float(self.txt_confidence.text())<0 or float(self.txt_confidence.text())>1:
                 self.txt_confidence.setText("0.9")
         except:
             self.txt_confidence.setText("0.9")
@@ -826,10 +834,10 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
 
         self.cb_posicion.setItemText(self.cb_posicion.currentIndex(),self.txt_nombre.text()+"     "+self.txt_top_left_x.text()+" "+self.txt_top_left_y.text()+" "+self.txt_bot_right_x.text()+" "+self.txt_bot_right_y.text())
                 
-        self.lista_posiciones[self.cb_index][0]=self.txt_top_left_x.text()
-        self.lista_posiciones[self.cb_index][1]=self.txt_top_left_y.text()
-        self.lista_posiciones[self.cb_index][2]=self.txt_bot_right_x.text()
-        self.lista_posiciones[self.cb_index][3]=self.txt_bot_right_y.text()
+        self.lista_posiciones[self.cb_index][0]=int(self.txt_top_left_x.text())
+        self.lista_posiciones[self.cb_index][1]=int(self.txt_top_left_y.text())
+        self.lista_posiciones[self.cb_index][2]=int(self.txt_bot_right_x.text())
+        self.lista_posiciones[self.cb_index][3]=int(self.txt_bot_right_y.text())
         if float(self.txt_confidence.text())<0.0 or float(self.txt_confidence.text())>1.0:
             self.txt_confidence.setText("0.9")
         self.lista_confidence[self.cb_index]=self.txt_confidence.text()
@@ -841,8 +849,7 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
         self.txtno_bot_right_y.setText(self.txt_bot_right_y.text())
         self.txtno_confidence.setText(self.txt_confidence.text())
         self.cambiar_si_inicial_mayor_final()
-
-    
+ 
     def remover(self):
         index = self.cb_posicion.currentIndex()
         self.cb_posicion.removeItem(index)
@@ -889,13 +896,9 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
                 if len(self.lista_img[self.cb_index])>0: #se fija si hay imagenes
                     thread = Thread(target=self.detectar_imagenes, args=(self.cb_index,), daemon=True)
                     self.lista_threads.append(thread)
-                    thread.start()
-                    #for thread in threads:
-                    #    thread.join()                        
-            sleep(0.1)    
+                    thread.start()                    
         else:
             self.lista_activado[self.cb_index]=False
-            sleep(1)
 
     def subir_img(self):
         

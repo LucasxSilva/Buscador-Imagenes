@@ -188,12 +188,14 @@ class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
             if self.buscar[0]==True:
                 self.color_default = self.btn_inicial.palette().color(self.btn_inicial.backgroundRole())
                 self.color_default = tuple(self.color_default.getRgb()[:3])
+                sleep(0.001)
                 self.btn_inicial.setStyleSheet("background-color: red;")
                 self.btn_final.setStyleSheet(f"background-color: rgb{self.color_default};")
 
             elif self.buscar[1]==True:
                 self.color_default = self.btn_final.palette().color(self.btn_final.backgroundRole())
                 self.color_default = tuple(self.color_default.getRgb()[:3])
+                sleep(0.001)
                 self.btn_final.setStyleSheet("background-color: red;")
                 self.btn_inicial.setStyleSheet(f"background-color: rgb{self.color_default};")      
                                 

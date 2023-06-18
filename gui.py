@@ -3,16 +3,15 @@ from PyQt6.QtCore import QFileSystemWatcher
 from PyQt6.QtGui import QIntValidator,QIcon
 import os
 from backend import clase_funciones
+
 current_dir = os.getcwd()
 img_path = os.path.join(current_dir, "Imagenes","")
-included_extensions = ['JPG','jpg','jpeg', 'bmp','PNG', 'png', 'gif','',' ']
-file_names = [fn for fn in os.listdir(img_path)
-    if any(fn.endswith(ext) for ext in included_extensions)]
-
 if not os.path.exists(img_path):
     os.makedirs(img_path)
 
-
+included_extensions = ['JPG','jpg','jpeg', 'bmp','PNG', 'png', 'gif','',' ']
+file_names = [fn for fn in os.listdir(img_path)
+    if any(fn.endswith(ext) for ext in included_extensions)]
 
 class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
     def __init__(self):

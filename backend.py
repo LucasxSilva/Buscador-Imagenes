@@ -16,12 +16,13 @@ import os
 
 current_dir = os.getcwd()
 img_path = os.path.join(current_dir, "Imagenes","")
+if not os.path.exists(img_path):
+    os.makedirs(img_path)
+
 included_extensions = ['JPG','jpg','jpeg', 'bmp','PNG', 'png', 'gif','',' ']
 file_names = [fn for fn in os.listdir(img_path)
     if any(fn.endswith(ext) for ext in included_extensions)]
 
-if not os.path.exists(img_path):
-    os.makedirs(img_path)
 
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long),

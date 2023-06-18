@@ -13,12 +13,11 @@ included_extensions = ['JPG','jpg','jpeg', 'bmp','PNG', 'png', 'gif','',' ']
 file_names = [fn for fn in os.listdir(img_path)
     if any(fn.endswith(ext) for ext in included_extensions)]
 
+
 class Ui_Buscador(QtWidgets.QWidget, QtCore.QObject):
     def __init__(self):
         super().__init__()
         self.funciones = clase_funciones(self)  
-
-
 
     def setupUi(self, Buscador):
         Buscador.setObjectName("Buscador")

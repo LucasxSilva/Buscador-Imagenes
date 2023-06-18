@@ -23,7 +23,6 @@ included_extensions = ['JPG','jpg','jpeg', 'bmp','PNG', 'png', 'gif','',' ']
 file_names = [fn for fn in os.listdir(img_path)
     if any(fn.endswith(ext) for ext in included_extensions)]
 
-
 class POINT(ctypes.Structure):
     _fields_ = [("x", ctypes.c_long),
                 ("y", ctypes.c_long)]

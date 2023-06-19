@@ -126,7 +126,7 @@ class clase_funciones():
         location=None
         try:
             location = pyautogui.locateCenterOnScreen(img, region=region, confidence=confidence, grayscale=True)
-            print(location)
+            #print(location)
         except:
             print("Region inadecuada, reajustando")
             height, width = img.shape[:2]
